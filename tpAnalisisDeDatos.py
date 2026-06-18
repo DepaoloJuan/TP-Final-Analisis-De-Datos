@@ -104,7 +104,7 @@ df_ocupados['P21'] = df_ocupados['P21'].replace(-9, np.nan)
 # Por eso, para esta exploración univariada usamos un CORTE TRANSVERSAL
 # (el último trimestre disponible de la base). La comparación histórica
 # !de ingresos en términos REALES (ajustados por IPC) la vamos a hacer
-# !más adelante, en la sección de evolución de ingresos.
+# !más adelante, en la sección de evolución de ingresos en el objetivo 2.
 
 ultimo_ano = df_ocupados['ANO4'].max()
 ultimo_trim = df_ocupados.loc[df_ocupados['ANO4'] == ultimo_ano, 'TRIMESTRE'].max()
