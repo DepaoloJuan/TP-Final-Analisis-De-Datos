@@ -244,3 +244,434 @@ print("\nGráficos guardados en la carpeta 'graficos/':")
 print("  - 01_no_respuesta_evolucion.png")
 print("  - 02_boxplot_ingresos.png")
 print("  - 03_histograma_ingresos.png")
+
+
+# =========================================================
+# OBJETIVO 2 - ANÁLISIS MULTIVARIADO
+# =========================================================
+
+# IPC anual promedio (base 2016 = 100)
+# Fuente: INDEC - Índice de Precios al Consumidor
+ipc_anual = {
+    2016: 100.0,
+    2017: 125.5,
+    2018: 172.0,
+    2019: 269.0,
+    2020: 336.0,
+    2021: 418.0,
+    2022: 628.0,
+    2023: 1415.0,
+    2024: 4070.0,
+    2025: 6850.0
+}
+
+df_historico['IPC'] = df_historico['ANO4'].map(ipc_anual)
+df_historico['P21_real'] = (df_historico['P21'] / df_historico['IPC']) * 100
+print("-" * 60)
+print("\nColumnas nuevas agregadas: IPC, P21_real")
+print(df_historico[['ANO4', 'P21', 'IPC', 'P21_real']].dropna().head(10))
+
+
+# =========================================================
+# 2.1 - EVOLUCIÓN DEL INGRESO REAL POR SEXO
+# =========================================================
+
+# CH04: 1 = Varón, 2 = Mujer
+df_ocupados_real = df_historico[
+    (df_historico['ESTADO'] == 1) &
+    (df_historico['P21'] > 0) &
+    (df_historico['P21_real'].notna())
+].copy()
+
+df_ocupados_real['Sexo'] = df_ocupados_real['CH04'].map({1: 'Varón', 2: 'Mujer'})
+
+ingreso_sexo = df_ocupados_real.groupby(['ANO4', 'AGLOMERADO', 'Sexo']).agg(
+    Mediana_real=('P21_real', 'median')
+).reset_index()
+
+ingreso_sexo['Aglomerado'] = ingreso_sexo['AGLOMERADO'].map(nombres_aglo)
+
+# print(ingreso_sexo.to_string(index=False))
+
+# --- Gráfico ---
+fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+
+for ax, (aglo_cod, aglo_nombre) in zip(axes, nombres_aglo.items()):
+    datos = ingreso_sexo[ingreso_sexo['AGLOMERADO'] == aglo_cod]
+    for sexo, linestyle in zip(['Varón', 'Mujer'], ['-', '--']):
+        subset = datos[datos['Sexo'] == sexo].sort_values('ANO4')
+        ax.plot(subset['ANO4'], subset['Mediana_real'],
+                marker='o', linestyle=linestyle, label=sexo)
+    ax.set_title(f'{aglo_nombre} — Ingreso Real Mediano por Sexo')
+    ax.set_xlabel('Año')
+    ax.set_ylabel('Ingreso real ($ de 2016)')
+    ax.set_xticks(range(2016, 2026))
+    ax.tick_params(axis='x', rotation=45)
+    ax.legend(title='Sexo')
+    ax.grid(alpha=0.3)
+
+plt.suptitle('Evolución del Ingreso Real de la Ocupación Principal por Sexo\nCABA vs GBA (2016-2025)', y=0.98)
+plt.tight_layout()
+plt.savefig('graficos/04_ingreso_real_sexo.png', dpi=150)
+plt.show()
+
+
+# =========================================================
+# 2.2 - EVOLUCIÓN DEL INGRESO REAL POR NIVEL EDUCATIVO
+# =========================================================
+
+# NIVEL_ED:
+# 1 = Primaria incompleta
+# 2 = Primaria completa
+# 3 = Secundaria incompleta
+# 4 = Secundaria completa
+# 5 = Superior universitaria incompleta
+# 6 = Superior universitaria completa
+# 7 = Sin instrucción
+# 9 = NS/NR
+
+niveles_ed = {
+    1: 'Primaria incompleta',
+    2: 'Primaria completa',
+    3: 'Secundaria incompleta',
+    4: 'Secundaria completa',
+    5: 'Superior incompleta',
+    6: 'Superior completa',
+    7: 'Sin instrucción'
+}
+
+df_ocupados_real['Nivel_Ed'] = df_ocupados_real['NIVEL_ED'].map(niveles_ed)
+
+# Agrupamos en 3 categorías para que el gráfico sea legible
+df_ocupados_real['Nivel_Ed_agrup'] = df_ocupados_real['NIVEL_ED'].map({
+    1: 'Bajo (hasta primaria)',
+    2: 'Bajo (hasta primaria)',
+    7: 'Bajo (hasta primaria)',
+    3: 'Medio (secundaria)',
+    4: 'Medio (secundaria)',
+    5: 'Alto (superior)',
+    6: 'Alto (superior)',
+})
+
+ingreso_ed = df_ocupados_real.groupby(['ANO4', 'AGLOMERADO', 'Nivel_Ed_agrup']).agg(
+    Mediana_real=('P21_real', 'median')
+).reset_index()
+
+ingreso_ed = ingreso_ed.dropna(subset=['Nivel_Ed_agrup'])
+
+# --- Gráfico ---
+colores_ed = {
+    'Bajo (hasta primaria)': '#d62728',
+    'Medio (secundaria)':    '#ff7f0e',
+    'Alto (superior)':       '#2ca02c'
+}
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+
+for ax, (aglo_cod, aglo_nombre) in zip(axes, nombres_aglo.items()):
+    datos = ingreso_ed[ingreso_ed['AGLOMERADO'] == aglo_cod]
+    for nivel, color in colores_ed.items():
+        subset = datos[datos['Nivel_Ed_agrup'] == nivel].sort_values('ANO4')
+        ax.plot(subset['ANO4'], subset['Mediana_real'],
+                marker='o', label=nivel, color=color)
+    ax.set_title(f'{aglo_nombre} — Ingreso Real por Nivel Educativo')
+    ax.set_xlabel('Año')
+    ax.set_ylabel('Ingreso real ($ de 2016)')
+    ax.set_xticks(range(2016, 2026))
+    ax.tick_params(axis='x', rotation=45)
+    ax.legend(title='Nivel educativo', fontsize=8)
+    ax.grid(alpha=0.3)
+
+plt.suptitle('Evolución del Ingreso Real por Nivel Educativo\nCABA vs GBA (2016-2025)', y=0.98)
+plt.tight_layout()
+plt.savefig('graficos/05_ingreso_real_nivel_ed.png', dpi=150)
+plt.show()
+
+
+# =========================================================
+# 2.3 - EVOLUCIÓN DEL INGRESO REAL POR CATEGORÍA OCUPACIONAL
+# =========================================================
+
+cat_ocup = {
+    1: 'Patrón/Empleador',
+    2: 'Cuenta propia',
+    3: 'Obrero/Empleado',
+}
+
+df_ocupados_real['Cat_Ocup'] = df_ocupados_real['CAT_OCUP'].map(cat_ocup)
+
+ingreso_cat = df_ocupados_real.groupby(['ANO4', 'AGLOMERADO', 'Cat_Ocup']).agg(
+    Mediana_real=('P21_real', 'median')
+).reset_index()
+
+ingreso_cat = ingreso_cat.dropna(subset=['Cat_Ocup'])
+
+# --- Gráfico ---
+colores_cat = {
+    'Patrón/Empleador': '#9467bd',
+    'Cuenta propia':    '#8c564b',
+    'Obrero/Empleado':  '#1f77b4',
+}
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+
+for ax, (aglo_cod, aglo_nombre) in zip(axes, nombres_aglo.items()):
+    datos = ingreso_cat[ingreso_cat['AGLOMERADO'] == aglo_cod]
+    for cat, color in colores_cat.items():
+        subset = datos[datos['Cat_Ocup'] == cat].sort_values('ANO4')
+        if len(subset) > 0:
+            ax.plot(subset['ANO4'], subset['Mediana_real'],
+                    marker='o', label=cat, color=color)
+    ax.set_title(f'{aglo_nombre} — Ingreso Real por Categoría Ocupacional')
+    ax.set_xlabel('Año')
+    ax.set_ylabel('Ingreso real ($ de 2016)')
+    ax.set_xticks(range(2016, 2026))
+    ax.tick_params(axis='x', rotation=45)
+    ax.legend(title='Categoría', fontsize=8)
+    ax.grid(alpha=0.3)
+
+plt.suptitle('Evolución del Ingreso Real por Categoría Ocupacional\nCABA vs GBA (2016-2025)', y=0.98)
+plt.tight_layout()
+plt.savefig('graficos/06_ingreso_real_cat_ocup.png', dpi=150)
+plt.show()
+
+
+# =========================================================
+# 2.4 - TASAS LABORALES POR SEXO
+# =========================================================
+
+df_activos = df_historico[df_historico['ESTADO'].isin([1, 2, 3])].copy()
+df_activos['Sexo'] = df_activos['CH04'].map({1: 'Varón', 2: 'Mujer'})
+
+def calcular_tasas(df):
+    ocupados  = df[df['ESTADO'] == 1]['PONDERA'].sum()
+    desocupados = df[df['ESTADO'] == 2]['PONDERA'].sum()
+    inactivos = df[df['ESTADO'] == 3]['PONDERA'].sum()
+    total = ocupados + desocupados + inactivos
+    pea = ocupados + desocupados
+    return pd.Series({
+        'Tasa_Actividad':     pea / total * 100,
+        'Tasa_Empleo':        ocupados / total * 100,
+        'Tasa_Desocupacion':  desocupados / pea * 100 if pea > 0 else 0
+    })
+
+tasas_sexo = df_activos.groupby(['ANO4', 'AGLOMERADO', 'Sexo']).apply(calcular_tasas).reset_index()
+tasas_sexo['Aglomerado'] = tasas_sexo['AGLOMERADO'].map(nombres_aglo)
+
+# print(tasas_sexo.to_string(index=False))
+
+# --- Gráfico ---
+indicadores = {
+    'Tasa_Actividad': 'Tasa de Actividad (%)',
+    'Tasa_Empleo': 'Tasa de Empleo (%)',
+    'Tasa_Desocupacion': 'Tasa de Desocupación (%)'
+}
+
+for indicador, titulo_eje in indicadores.items():
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+
+    for ax, (aglo_cod, aglo_nombre) in zip(axes, nombres_aglo.items()):
+        datos = tasas_sexo[tasas_sexo['AGLOMERADO'] == aglo_cod]
+        for sexo, linestyle in zip(['Varón', 'Mujer'], ['-', '--']):
+            subset = datos[datos['Sexo'] == sexo].sort_values('ANO4')
+            ax.plot(subset['ANO4'], subset[indicador],
+                    marker='o', linestyle=linestyle, label=sexo)
+        ax.set_title(f'{aglo_nombre}')
+        ax.set_xlabel('Año')
+        ax.set_ylabel(titulo_eje)
+        ax.set_xticks(range(2016, 2026))
+        ax.tick_params(axis='x', rotation=45)
+        ax.legend(title='Sexo')
+        ax.grid(alpha=0.3)
+
+    nombre_archivo = indicador.lower()
+    plt.suptitle(f'{titulo_eje} por Sexo — CABA vs GBA (2016-2025)', y=0.98)
+    plt.tight_layout()
+    plt.savefig(f'graficos/07_{nombre_archivo}_sexo.png', dpi=150)
+    plt.show()
+
+# =========================================================
+# 2.5 - TASAS LABORALES POR GRUPO ETARIO
+# =========================================================
+
+# Creamos grupos de edad a partir de CH06
+bins = [14, 24, 34, 49, 64, 99]
+labels = ['15-24', '25-34', '35-49', '50-64', '65+']
+
+df_activos['Grupo_Edad'] = pd.cut(df_activos['CH06'], bins=bins, labels=labels)
+
+tasas_edad = df_activos.groupby(['ANO4', 'AGLOMERADO', 'Grupo_Edad']).apply(calcular_tasas).reset_index()
+tasas_edad = tasas_edad.dropna(subset=['Grupo_Edad'])
+
+# --- Gráfico: solo desocupación por edad (la más informativa) ---
+colores_edad = {
+    '15-24': '#d62728',
+    '25-34': '#ff7f0e',
+    '35-49': '#2ca02c',
+    '50-64': '#1f77b4',
+    '65+':   '#9467bd'
+}
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+
+for ax, (aglo_cod, aglo_nombre) in zip(axes, nombres_aglo.items()):
+    datos = tasas_edad[tasas_edad['AGLOMERADO'] == aglo_cod]
+    for grupo, color in colores_edad.items():
+        subset = datos[datos['Grupo_Edad'] == grupo].sort_values('ANO4')
+        ax.plot(subset['ANO4'], subset['Tasa_Desocupacion'],
+                marker='o', label=grupo, color=color)
+    ax.set_title(f'{aglo_nombre}')
+    ax.set_xlabel('Año')
+    ax.set_ylabel('Tasa de Desocupación (%)')
+    ax.set_xticks(range(2016, 2026))
+    ax.tick_params(axis='x', rotation=45)
+    ax.legend(title='Grupo etario')
+    ax.grid(alpha=0.3)
+
+plt.suptitle('Tasa de Desocupación por Grupo Etario — CABA vs GBA (2016-2025)', y=0.98)
+plt.tight_layout()
+plt.savefig('graficos/08_desocupacion_edad.png', dpi=150)
+plt.show()
+
+
+# --- Gráfico unificado: 3 tasas por sexo ---
+fig, axes = plt.subplots(3, 2, figsize=(14, 12))
+
+indicadores = {
+    'Tasa_Actividad': 'Tasa de Actividad (%)',
+    'Tasa_Empleo': 'Tasa de Empleo (%)',
+    'Tasa_Desocupacion': 'Tasa de Desocupación (%)'
+}
+
+for row, (indicador, titulo_eje) in enumerate(indicadores.items()):
+    for col, (aglo_cod, aglo_nombre) in enumerate(nombres_aglo.items()):
+        ax = axes[row, col]
+        datos = tasas_sexo[tasas_sexo['AGLOMERADO'] == aglo_cod]
+        for sexo, linestyle in zip(['Varón', 'Mujer'], ['-', '--']):
+            subset = datos[datos['Sexo'] == sexo].sort_values('ANO4')
+            ax.plot(subset['ANO4'], subset[indicador],
+                    marker='o', linestyle=linestyle, label=sexo)
+        ax.set_title(f'{aglo_nombre} — {titulo_eje}')
+        ax.set_xlabel('Año')
+        ax.set_ylabel(titulo_eje)
+        ax.set_xticks(range(2016, 2026))
+        ax.tick_params(axis='x', rotation=45)
+        ax.legend(title='Sexo', fontsize=8)
+        ax.grid(alpha=0.3)
+
+plt.suptitle('Tasas Laborales por Sexo — CABA vs GBA (2016-2025)', y=0.98)
+plt.tight_layout()
+plt.savefig('graficos/07_tasas_laborales_sexo.png', dpi=150)
+plt.show()
+
+
+# =========================================================
+# 2.6 - BRECHA SALARIAL DE GÉNERO
+# =========================================================
+
+# Pivoteamos para tener varón y mujer en columnas separadas
+brecha = ingreso_sexo.pivot_table(
+    index=['ANO4', 'AGLOMERADO'],
+    columns='Sexo',
+    values='Mediana_real'
+).reset_index()
+
+brecha.columns.name = None
+brecha['Brecha (%)'] = ((brecha['Varón'] - brecha['Mujer']) / brecha['Varón'] * 100).round(1)
+brecha['Aglomerado'] = brecha['AGLOMERADO'].map(nombres_aglo)
+
+print("-" * 60)
+print(brecha[['ANO4', 'Aglomerado', 'Varón', 'Mujer', 'Brecha (%)']].to_string(index=False))
+
+# --- Gráfico ---
+fig, ax = plt.subplots(figsize=(10, 5))
+
+for aglo_cod, aglo_nombre in nombres_aglo.items():
+    datos = brecha[brecha['AGLOMERADO'] == aglo_cod].sort_values('ANO4')
+    ax.plot(datos['ANO4'], datos['Brecha (%)'],
+            marker='o', label=aglo_nombre, color=colores_aglo[aglo_cod])
+
+ax.set_title('Brecha Salarial de Género — CABA vs GBA (2016-2025)', y=0.98)
+ax.set_xlabel('Año')
+ax.set_ylabel('Brecha salarial (%)')
+ax.set_xticks(range(2016, 2026))
+ax.tick_params(axis='x', rotation=45)
+ax.legend(title='Aglomerado')
+ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig('graficos/09_brecha_salarial_genero.png', dpi=150)
+plt.show()
+
+
+print("-" * 60)
+# print("Valores únicos en PP04B_COD:")
+# print(df_historico[df_historico['ESTADO'] == 1]['PP04B_COD'].value_counts().sort_index().head(20))
+# print("Total valores únicos PP04B_COD:", df_historico[df_historico['ESTADO'] == 1]['PP04B_COD'].nunique())
+# print("\nTop 20 más frecuentes:")
+# print(df_historico[df_historico['ESTADO'] == 1]['PP04B_COD'].value_counts().head(20))
+
+
+# =========================================================
+# 2.7 - COMPOSICIÓN DEL EMPLEO POR SECTOR
+# =========================================================
+
+def clasificar_sector(cod):
+    if pd.isna(cod):
+        return None
+    cod = int(cod)
+    if 100 <= cod <= 399:
+        return 'Agro/Minería'
+    elif 1000 <= cod <= 3999:
+        return 'Industria'
+    elif 4100 <= cod <= 4399:
+        return 'Construcción'
+    elif 4500 <= cod <= 4999 or 5600 <= cod <= 5699:
+        return 'Comercio y hotelería'
+    elif 4000 <= cod <= 4099:
+        return 'Comercio y hotelería'
+    elif 6000 <= cod <= 6999:
+        return 'Transporte/Finanzas'
+    elif 8400 <= cod <= 8499:
+        return 'Adm. Pública'
+    elif 8500 <= cod <= 8599:
+        return 'Educación'
+    elif 8600 <= cod <= 8699:
+        return 'Salud'
+    elif 9700 <= cod <= 9799:
+        return 'Serv. Doméstico'
+    elif 9000 <= cod <= 9999:
+        return 'Otros servicios'
+    else:
+        return 'Otros'
+
+df_ocupados_real['Sector'] = df_ocupados_real['PP04B_COD'].apply(clasificar_sector)
+
+# Composición por sector, aglomerado y año
+composicion = df_ocupados_real.groupby(['ANO4', 'AGLOMERADO', 'Sector'])['PONDERA'].sum().reset_index()
+composicion_total = composicion.groupby(['ANO4', 'AGLOMERADO'])['PONDERA'].sum().reset_index()
+composicion_total.columns = ['ANO4', 'AGLOMERADO', 'Total']
+composicion = composicion.merge(composicion_total, on=['ANO4', 'AGLOMERADO'])
+composicion['Participacion (%)'] = (composicion['PONDERA'] / composicion['Total'] * 100).round(1)
+composicion = composicion.dropna(subset=['Sector'])
+
+# --- Gráfico: comparación 2016 vs 2025 por sector ---
+años_comparar = [2016, 2025]
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+for ax, (aglo_cod, aglo_nombre) in zip(axes, nombres_aglo.items()):
+    datos = composicion[
+        (composicion['AGLOMERADO'] == aglo_cod) &
+        (composicion['ANO4'].isin(años_comparar))
+    ].pivot_table(index='Sector', columns='ANO4', values='Participacion (%)').fillna(0)
+
+    datos.plot(kind='barh', ax=ax, color=['#1f77b4', '#ff7f0e'])
+    ax.set_title(f'{aglo_nombre}')
+    ax.set_xlabel('Participación (%)')
+    ax.set_ylabel('')
+    ax.legend(title='Año')
+    ax.grid(axis='x', alpha=0.3)
+
+plt.suptitle('Composición del Empleo por Sector — CABA vs GBA (2016 vs 2025)', y=0.98)
+plt.tight_layout()
+plt.savefig('graficos/10_composicion_empleo_sector.png', dpi=150)
+plt.show()
